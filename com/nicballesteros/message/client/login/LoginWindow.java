@@ -6,7 +6,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 
-import com.nicballesteros.message.client.messagesender.MessageSender;
+import com.nicballesteros.message.client.messagesender.MessageSenderWindow;
 import com.nicballesteros.message.client.newuser.NewUserWindow;
 
 import javax.swing.JLabel;
