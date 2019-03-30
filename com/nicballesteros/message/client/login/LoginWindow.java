@@ -6,6 +6,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 
+import com.nicballesteros.message.client.messagesender.MessageSender;
 import com.nicballesteros.message.client.newuser.NewUserWindow;
 
 import javax.swing.JLabel;
@@ -31,7 +32,7 @@ public class LoginWindow extends JFrame {
 	private JTextField portField;
 	private JPasswordField passwordField;
 	
-	private char[] password;
+	private String password;
 	private String username;
 	private String ipAddress;
 	private int port;
@@ -58,19 +59,65 @@ public class LoginWindow extends JFrame {
 	
 	private boolean getInputs() {
 		username = userField.getText();
-		password = passwordField.getPassword();
+		password = new String(passwordField.getPassword());
 		ipAddress = ipField.getText();
 		port = Integer.parseInt(portField.getText());
-		
-		login = new Login(username, password, ipAddress, port);
-		
-		if(login.openConnection()) {
-			login.sendPublic();
-			
-			if(login.getServerPublic()) {
-				login.sendPassword();
-				if(login.getConfimation()) {
-					return true;
+
+		//TODO make a new thread that checks if the info provided was correct or not
+
+		if(!username.equals("") && !password.equals("") && !ipAddress.equals("") && port > 0 && port < 10000){
+			login = new Login(username, password, ipAddress, port);
+
+			if(login.makeSocket()) {
+				//TODO make this login.run(); and manage client and start listening
+				login.receive();
+				login.sendConnectionSignal();//
+
+				//wait for pub and id to be send
+				int time = 0;
+				while(!login.isServerReadyForEncryption() && time < 100) { //waits for signal for one second
+					try {
+						Thread.sleep((long)10);
+						//System.out.println("wait");
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					time++;
+				}
+				if(time < 100){
+					login.sendAES();
+					//wait for confirmation
+					time = 0;
+					while(!login.isServerReadyForCreds() && time < 100) {
+						//System.out.println("not ready");
+						try {
+							Thread.sleep((long)10);
+							//System.out.println("wait");
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+						time++;
+					}
+					if(time < 100){
+						try {
+							login.sendUsername();
+							login.sendPassword();
+							//System.out.println("out of pass");
+						}
+						catch(Exception e) {
+							e.printStackTrace();
+						}
+
+						if(login.passAccepted()){
+							return true;
+						}
+					}
+					else{
+						System.out.println("Timed Out");
+					}
+				}
+				else{
+					System.out.println("Timed Out");
 				}
 			}
 		}
@@ -144,10 +191,11 @@ public class LoginWindow extends JFrame {
 		btnLogin.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				if(getInputs()) {
-					//stop this window
+					dispose();
+					new MessageSenderWindow();
 				}
 				else {
-					//clear window and print err msg
+					clearText();
 				}
 			}
 		});
@@ -162,7 +210,12 @@ public class LoginWindow extends JFrame {
 		lblWelcome.setFont(new Font("Tahoma", Font.PLAIN, 15));
 		lblWelcome.setBounds(110, 11, 64, 20);
 		contentPane.add(lblWelcome);
-		
+
+		userField.setText("test");
+		passwordField.setText("1234");
+		ipField.setText("192.168.2.89");
+		portField.setText("9999");
+
 		setVisible(true);
 	}
 	
@@ -170,5 +223,12 @@ public class LoginWindow extends JFrame {
 		dispose();
 		new NewUserWindow();
 		System.out.println("Press");
+	}
+
+	private void clearText(){
+		this.userField.setText("");
+		this.passwordField.setText("");
+		this.ipField.setText("");
+		this.portField.setText("");
 	}
 }

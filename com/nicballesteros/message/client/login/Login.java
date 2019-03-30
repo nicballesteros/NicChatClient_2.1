@@ -1,21 +1,18 @@
 package com.nicballesteros.message.client.login;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.security.InvalidKeyException;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.security.*;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
+import java.util.Random;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.commons.codec.binary.Base64;
 
@@ -24,7 +21,9 @@ public class Login {
 	private String password;
 	private InetAddress address;
 	private int port;
-	
+
+	private int id;
+
 	private DatagramSocket socket;
 	
 	private Thread send;
@@ -32,16 +31,15 @@ public class Login {
 	
 	private boolean connected;
 	
-	private PublicKey publicKey;
-	private PrivateKey privateKey;
-	
 	private PublicKey serverPublicKey;
 	
-	private Cipher cipher;
-	
-	public Login(String username, char[] password, String address, int port) {
+	private SecretKeySpec AESkey;
+
+	private byte[] hashedPassword;
+
+	public Login(String username, String password, String address, int port) {
 		this.username = username;
-		this.password = password.toString();
+		this.password = password;
 		this.port = port;
 		
 		try {
@@ -53,27 +51,38 @@ public class Login {
 		
 		generateKeys();
 	}
-	
+
 	private void generateKeys() {
-		KeyPairGenerator keyGen;
-		
+		//AES
+		//random 64 byte string
+		byte[] key = new byte[16];
+		new Random().nextBytes(key);
+
+		MessageDigest sha = null;
+
 		try {
-			keyGen = KeyPairGenerator.getInstance("RSA");
-			keyGen.initialize(1024);
-			
-			KeyPair pair = keyGen.generateKeyPair();
-			this.publicKey = pair.getPublic();
-			this.privateKey = pair.getPrivate();
+			sha = MessageDigest.getInstance("SHA-1");
+			key = sha.digest(key);
+			key = Arrays.copyOf(key, 16);
+			AESkey = new SecretKeySpec(key, "AES");
 		}
 		catch(Exception e) {
 			e.printStackTrace();
 		}
 	}
-	
+
 	private void sendPacket(final byte[] data) {
 		send = new Thread("Send") {
 			public void run() {
-				DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
+				ByteArrayOutputStream bb = new ByteArrayOutputStream();
+				try {
+					bb.write(data);
+					bb.write((byte)75);
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				byte[] out = bb.toByteArray();
+				DatagramPacket packet = new DatagramPacket(out, out.length, address, port);
 				try {
 					socket.send(packet);
 				} catch (IOException e) {
@@ -83,141 +92,307 @@ public class Login {
 		};
 		send.start();
 	}
-	
-	private String encrypt(String msg) {
-		String encrypted;
-		
-		try {
-			this.cipher.init(Cipher.ENCRYPT_MODE, serverPublicKey);
-		} 
-		catch (InvalidKeyException e) {
-			e.printStackTrace();
-		}
-		
-		
-		try {
-			encrypted = Base64.encodeBase64String(cipher.doFinal(Base64.decodeBase64(msg)));
-		} 
-		catch (Exception e) {
-			e.printStackTrace();
-			encrypted = "error";
-		} 
-		
-		return encrypted;
+
+	public void disconnect(){
+		socket.close();
+		running = false;
 	}
-	
-	private String hashPass() {
-		
-		String generatedPassword = null;
-		
-		try {
-			MessageDigest md = MessageDigest.getInstance("MD5");
-			
-			md.update(this.password.getBytes());
-			
-			byte[] bytes = md.digest();
-			StringBuilder sb = new StringBuilder();
-			for(int i = 0; i < bytes.length; i++) {
-				sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
+
+	private boolean quit = false;
+
+	public boolean failed(){
+		return quit;
+	}
+
+	private void whichFormOfEncryption(byte[] data) throws Exception {
+		byte encryption = data[0];
+		data = Arrays.copyOfRange(data, 1, data.length);
+
+		int cutoff = 0;
+		for(int j = data.length - 1; j > 0; j--) {
+			if(data[j] == (byte)75) {
+				cutoff = j;
+				break;
 			}
-			
-			generatedPassword = sb.toString();
 		}
-		catch(NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		}
-		
-		return generatedPassword;
-	}
-	
-	private byte[] receive() {
-		byte[] data = new byte[1024];
-		DatagramPacket packet = new DatagramPacket(data, data.length);
 
-		try {
-			socket.receive(packet);
+		data = Arrays.copyOfRange(data, 0, cutoff);
+
+		if(encryption == (byte)100) { //no encryption
+			//Get the id
+
+			byte[] idBytes = Arrays.copyOfRange(data, 0, 4);
+			ByteBuffer wrapped = ByteBuffer.wrap(idBytes);
+			id = wrapped.getInt();
+
+			data = Arrays.copyOfRange(data, 4, data.length);
+			//Get the pub key
+			serverPublicKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(data));
+
+			publicKeyIsReceived = true;
 		}
-		catch (Exception e){
-			e.printStackTrace();
+		else if(encryption == (byte)101) { //AES encryption
+			data = decryptByteAES(data);
+			ByteBuffer wrapped = ByteBuffer.wrap(data);
+			int conf = wrapped.getInt();
+			if(conf == 24242) {
+				readyToSendCreds = true;
+			}
+			else if(conf == 54321) {
+				System.out.println("All is good!");
+				//the user was registered in the database
+				disconnect();
+			}
+			else if(conf == 34251){
+				stopPepper = true;
+				System.out.println("password accepted");
+			}
+			else if(conf == 55555){
+				System.out.println("Client connected!!!");
+			}
+			else {
+				System.out.println("Wasnt 12345");
+				quit = true;
+			}
 		}
-			
-		return packet.getData();
-	}
-	
-	public boolean openConnection() {
-		try {
-			socket = new DatagramSocket();
-		} 
-		catch (Exception e) {
-			e.printStackTrace();
-			return false;
+		else if(encryption == (byte)25){
+			quit = true;
 		}
-		return true;
-	}
-	
-	public void sendPublic() {
-		String data = "~c|`" + this.username + "~p|`" + new String(this.privateKey.getEncoded());
-		sendPacket(data.getBytes());
-	}
-	
-	public void sendPassword() {
-		String passwordHashed = hashPass();
-		send = null;
-		
-		String string = "~n|`" + this.username + "~p|`" + passwordHashed;
-		string = encrypt(string);
-		sendPacket(string.getBytes());
+		else {
+			System.out.println("Woh woh woh error on which form");
+			quit = true;
+		}
 	}
 
-	private boolean validKey = false;
-	
-	public boolean getServerPublic() {
+	private boolean running = true;
+
+	public void receive() {
 		receive = new Thread("Receive") {
 			public void run() {
-				byte[] data = receive();
-				String string = new String(data);
+				DatagramPacket packet;
+				while(running) {
+					byte[] data = new byte[1024];
+					packet = new DatagramPacket(data, data.length);
 
-				if(string.startsWith("~p|`")) {
-					string = string.substring(4);
-					validKey = true;
+					try {
+						socket.receive(packet);
+
+						whichFormOfEncryption(packet.getData());
+					}
+					catch(Exception e) {
+						e.printStackTrace();
+					}
 				}
 			}
 		};
 		receive.start();
-			
-		
-		int i = 0;
-		while(receive.isAlive() && i < 10) {
-			try {
-				Thread.sleep((long) 100);
-			} 
-			catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-			i++;
-		}
-
-		if(receive.isAlive()) {
-			receive.interrupt();
-		}
-		
-		return validKey;
 	}
-	
-	public boolean getConfimation() {
-		receive = null;
-		
-		boolean state = false;
-		
-		byte[] data = receive();
-		String string = new String(data);
 
-		if(string.equals("TRUE")) {
+	public void sendConnectionSignal() {
+		byte[] out = { (byte)100, (byte)101};
+
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+		try{
+			output.write(out);
+			output.write(username.getBytes());
+		}
+		catch (IOException i){
+			i.printStackTrace();
+		}
+
+		sendPacket(output.toByteArray());
+	}
+
+	private byte[] encryptByteAES(byte[] msg) {
+		try {
+			Cipher aescipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+			aescipher.init(Cipher.ENCRYPT_MODE, AESkey);
+			return aescipher.doFinal(msg);
+		}
+		catch(Exception e) {
+			e.printStackTrace();
+		}
+
+		return null;
+	}
+
+	private byte[] hashPassword(int index) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("~p|`#");
+		sb.append(password);
+		sb.append((char)index);
+		String precompiledPass = sb.toString();
+		//System.out.println((char)index + " " + index +" : " + precompiledPass);
+		//System.out.print(index + ": ");
+		MessageDigest digest;
+		try {
+			digest = MessageDigest.getInstance("SHA-256");
+			//System.out.println(Base64.encodeBase64String(digest.digest(precompiledPass.getBytes())));
+			//System.out.println(precompiledPass);
+			return digest.digest(precompiledPass.getBytes());
+		}
+		catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	private byte[] decryptByteAES(byte[] data) {
+		try {
+			Cipher aescipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+			aescipher.init(Cipher.DECRYPT_MODE, AESkey);
+			return aescipher.doFinal(data);
+		}
+		catch(Exception e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	public boolean makeSocket() {
+		try {
+			socket = new DatagramSocket();
 			return true;
 		}
-		else {
-			return false;
+		catch (SocketException e) {
+			e.printStackTrace();
+		}
+
+		return false;
+	}
+
+	private boolean readyToSendCreds;
+	private boolean publicKeyIsReceived;
+
+	public boolean isServerReadyForCreds() {
+		return readyToSendCreds;
+	}
+
+	public boolean isServerReadyForEncryption() {
+		return publicKeyIsReceived;
+	}
+
+	public boolean passAccepted(){
+		return stopPepper;
+	}
+
+	private byte[] encryptByteRSA(byte[] rsa) {
+		try {
+			Cipher cipher = Cipher.getInstance("RSA");
+			cipher.init(Cipher.ENCRYPT_MODE, serverPublicKey);
+			return cipher.doFinal(rsa);
+		}
+		catch(Exception e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	public void sendAES() {
+		byte[] out;
+
+		try {
+			byte[] bb = ByteBuffer.allocate(4).putInt(id).array();
+
+			ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+			output.write((byte)101);
+			output.write((byte)102);
+			output.write(AESkey.getEncoded());
+
+			out = encryptByteRSA(output.toByteArray());
+
+			output = null;
+			output = new ByteArrayOutputStream();
+
+			output.write((byte)101);
+			output.write(bb);
+			output.write(out);
+
+			//printByteDataToConsole("output", output.toByteArray());
+
+			sendPacket(output.toByteArray());
+		}
+		catch(Exception e) {
+			e.printStackTrace();
 		}
 	}
-	
+
+	public void sendUsername() throws Exception{
+		byte encryptionIdentifier = (byte)102;
+		byte[] idToBytes = ByteBuffer.allocate(4).putInt(id).array();
+		byte registeredUserIdentifier = (byte)101;
+		byte usernameIdentifier = (byte)100;
+		byte[] usernameBytes = username.getBytes();
+
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		output.write(registeredUserIdentifier);
+		output.write(usernameIdentifier);
+		output.write(usernameBytes);
+
+		//printByteDataToConsole("Username", output.toByteArray());
+
+		byte[] out = encryptByteAES(output.toByteArray());
+
+		output = null;
+		output = new ByteArrayOutputStream();
+		output.write(encryptionIdentifier);
+		output.write(idToBytes);
+		output.write(out);
+
+		//printByteDataToConsole("Username pt2", output.toByteArray());
+
+		sendPacket(output.toByteArray());
+	}
+
+	private boolean stopPepper = false;
+
+	public void sendPassword() throws Exception{
+		byte encryptionIdentifier = (byte)102;
+		byte[] idToBytes = ByteBuffer.allocate(4).putInt(id).array();
+		byte registeredUserIdentifier = (byte)101;
+		byte passwordIdentifier = (byte)101;
+
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		output.write(registeredUserIdentifier);
+		output.write(passwordIdentifier);
+
+		byte[] out = output.toByteArray();
+
+		int i = 33;
+
+		while(i < 256 && !stopPepper){
+			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+			outputStream.write(out);
+			outputStream.write(hashPassword(i));
+			//System.out.println((char)(i+33) + " : " + Base64.encodeBase64String(hashPassword(i)));
+			//printByteDataToConsole("Pass Hash", output.toByteArray());
+
+			byte[] send = encryptByteAES(outputStream.toByteArray());
+
+			ByteArrayOutputStream os = new ByteArrayOutputStream();
+
+			os.write(encryptionIdentifier);
+			os.write(idToBytes);
+			os.write(send);
+
+			//printByteDataToConsole("Pass Hash pt 2", output.toByteArray());
+
+			sendPacket(os.toByteArray());
+			Thread.sleep(10);
+			i++;
+		}
+	}
+
+	private void printByteDataToConsole(String name, byte[] data) {
+		System.out.print(name + ": {");
+		for(byte dat : data) {
+			int num = dat;
+			System.out.print(num + ", ");
+		}
+		System.out.println("}");
+	}
+
 }

@@ -124,6 +124,8 @@ public class NewUserWindow extends JFrame {
 		makeWindow();
 	}
 
+
+
 	private boolean registerNewUser() {
 		/**
 		 * Returns true if the user was made
@@ -143,11 +145,11 @@ public class NewUserWindow extends JFrame {
 			e.printStackTrace();
 		}
 
-		newUser = new NewUser(username, password, address, port);
-		
-		System.out.println(username);
-		
-		if(password.equals(confirmPass) && username != null) {
+		System.out.println(password);
+
+		if(password.equals(confirmPass) && !username.equals("") && !password.equals("") && !address.equals("") && port > 0 && port < 10000 ) {
+			newUser = new NewUser(username, password, address, port);
+
 			if(newUser.makeSocket()) {
 				newUser.receive();
 				newUser.sendConnectionSignal();
@@ -156,7 +158,7 @@ public class NewUserWindow extends JFrame {
 				//wait for pub and id to be send
 				while(!newUser.isServerReadyForEncryption()) {
 					try {
-						Thread.sleep((long)100);
+						Thread.sleep((long)10);
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
@@ -167,7 +169,7 @@ public class NewUserWindow extends JFrame {
 				while(!newUser.isServerReadyForCreds()) {
 					//System.out.println("not ready");
 					try {
-						Thread.sleep((long)100);
+						Thread.sleep((long)10);
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
@@ -180,9 +182,8 @@ public class NewUserWindow extends JFrame {
 				catch(Exception e) {
 					e.printStackTrace();
 				}
+				return true;
 			}
-			
-			return newUser.makeSocket();
 		}
 		
 		return false;

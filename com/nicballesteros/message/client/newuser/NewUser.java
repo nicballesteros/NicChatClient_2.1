@@ -58,16 +58,22 @@ public class NewUser {
 	
 	private char randomChar() {
 		Random rand = new Random();
-		
-		int n = rand.nextInt(256);
-		
-		byte eventualchar = (byte)n;
-		
-		return (char)eventualchar;
+		//0-223
+		int n = rand.nextInt(223);
+		//33-256
+		n += 33;
+		System.out.println("char" + (char)n);
+		System.out.println("num" + n);
+		return (char)n;
 	}
 	
 	private void hashPassword() {
-		String precompiledPass = "~p|`#" + password + randomChar();
+		StringBuilder sb = new StringBuilder();
+		sb.append("~p|`#");
+		sb.append((password));
+		sb.append(randomChar());
+		String precompiledPass = sb.toString();
+		System.out.println(precompiledPass);
 		MessageDigest digest;
 		try {
 			digest = MessageDigest.getInstance("SHA-256");
@@ -76,6 +82,7 @@ public class NewUser {
 		catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
+		System.out.println(Base64.encodeBase64String(hashedPassword));
 	}
 	
 	public byte[] getAESkeyBytes() {
@@ -94,8 +101,7 @@ public class NewUser {
 		return null;
 	}
 	
-	private byte[] encryptByteAES(byte[] msg) {	
-		//TODO add some salt and some peppa
+	private byte[] encryptByteAES(byte[] msg) {
 		try {
 			Cipher aescipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
 			aescipher.init(Cipher.ENCRYPT_MODE, AESkey);
@@ -143,7 +149,7 @@ public class NewUser {
 	}
 	
 	public void sendConnectionSignal() {
-		byte[] out = { (byte)100};		
+		byte[] out = { (byte)100, (byte)100};
 		sendPacket(out);
 	}
 	
@@ -179,8 +185,11 @@ public class NewUser {
 		}
 	}
 
-	
-	
+	public void disconnect(){
+		socket.close();
+		running = false;
+	}
+
 	public boolean isServerReadyForCreds() {
 		return readyToSendCreds;
 	}
@@ -188,7 +197,9 @@ public class NewUser {
 	public boolean isServerReadyForEncryption() {
 		return publicKeyIsReceived;
 	}
-	
+
+	private boolean quit = false;
+
 	private void whichFormOfEncryption(byte[] data) throws Exception {
 		byte encryption = data[0];
 		data = Arrays.copyOfRange(data, 1, data.length);
@@ -205,14 +216,15 @@ public class NewUser {
 		
 		if(encryption == (byte)100) { //no encryption
 			//Get the id
+
 			byte[] idBytes = Arrays.copyOfRange(data, 0, 4);
 			ByteBuffer wrapped = ByteBuffer.wrap(idBytes);
 			id = wrapped.getInt();
-			
+
 			data = Arrays.copyOfRange(data, 4, data.length);
 			//Get the pub key
 			serverPublicKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(data));
-			
+
 			publicKeyIsReceived = true;
 		}
 		else if(encryption == (byte)101) { //AES encryption
@@ -225,6 +237,7 @@ public class NewUser {
 			else if(conf == 54321) {
 				System.out.println("All is good!");
 				//the user was registered in the database
+				disconnect();
 			}
 			else {
 				System.out.println("Wasnt 12345");
@@ -300,7 +313,7 @@ public class NewUser {
 		byte[] idToBytes = ByteBuffer.allocate(4).putInt(id).array();
 		byte newUserIdentifier = (byte)100;
 		byte usernameIdentifier = (byte)100;
-		byte[] usernameBytes = Base64.decodeBase64(username);
+		byte[] usernameBytes = username.getBytes();
 		
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 		output.write(newUserIdentifier);
