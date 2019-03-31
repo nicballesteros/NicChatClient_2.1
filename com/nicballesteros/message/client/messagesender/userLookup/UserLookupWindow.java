@@ -1,6 +1,7 @@
 package com.nicballesteros.message.client.messagesender.userLookup;
 
 import com.nicballesteros.message.client.messagesender.MessageSenderManager;
+import com.nicballesteros.message.client.messagesender.MessageSenderWindow;
 
 import javax.swing.JFrame;
 import javax.swing.JTextField;
@@ -38,12 +39,14 @@ public class UserLookupWindow extends JFrame {
 //	}
 
 	private MessageSenderManager manager;
+	private MessageSenderWindow window;
 
 	/**
 	 * Create the frame.
 	 */
-	public UserLookupWindow(MessageSenderManager manager) {
+	public UserLookupWindow(MessageSenderManager manager, MessageSenderWindow window) {
 		this.manager = manager;
+		this.window = window;
 		
 		try {
 			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -72,14 +75,16 @@ public class UserLookupWindow extends JFrame {
 		
 		btnSend.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				lblErrorMsg1.setVisible(true);
-				lblErrorMsg2.setVisible(true);
+				lblErrorMsg1.setVisible(false);
+				lblErrorMsg2.setVisible(false);
+
 				System.out.println("send...");
 				String inputName = txtSearch.getText();
 				manager.requestIfClientExists(inputName);
 				if(manager.doesClientExist() && manager.doesAcquaintanceAlreadyExist(inputName)){
 					System.out.println("added");
 					manager.displayNewAcquaintance(inputName);
+					window.enableWindow();
 					dispose();
 				}
 				else{
@@ -101,7 +106,13 @@ public class UserLookupWindow extends JFrame {
 		lblErrorMsg1.setVisible(false);
 		lblErrorMsg2.setVisible(false);
 
-		
+		addWindowListener(new java.awt.event.WindowAdapter() {
+			@Override
+			public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+				window.enableWindow();
+			}
+		});
+
 		setVisible(true);
 	}
 

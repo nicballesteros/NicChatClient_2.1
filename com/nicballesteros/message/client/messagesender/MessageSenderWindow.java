@@ -15,10 +15,7 @@ import java.awt.GridBagLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Font;
 import java.awt.Insets;
-import java.awt.event.ActionListener;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.net.InetAddress;
 
 public class MessageSenderWindow extends JFrame {
@@ -49,7 +46,7 @@ public class MessageSenderWindow extends JFrame {
 	public MessageSenderWindow(int id, SecretKeySpec AESkey, InetAddress ipAddress, int port) {
 		//TODO when the client closes, set the user to not connected
 
-		manager = new MessageSenderManager(id, AESkey, ipAddress, port);
+		manager = new MessageSenderManager(id, AESkey, ipAddress, port, this);
 
 		createWindow();
 	}
@@ -116,6 +113,18 @@ public class MessageSenderWindow extends JFrame {
 		list.setFont(new Font("Tahoma", Font.PLAIN, 15)); //TODO request for data
 
 		manager.updateList(listModel);
+		list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		//list.setSelectedIndex(2);
+		list.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent evt) {
+				JList list = (JList)evt.getSource();
+				if(evt.getClickCount() == 1){
+					int index = list.locationToIndex(evt.getPoint());
+					manager.getID(index);
+				}
+			}
+		});
 
 		JScrollPane scrollList = new JScrollPane(list);
 		GridBagConstraints gbc_scrollListConstraints = new GridBagConstraints();
@@ -141,7 +150,8 @@ public class MessageSenderWindow extends JFrame {
 		btnNewMessage = new JButton("New Message");
 		btnNewMessage.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				new UserLookupWindow(manager);
+				setEnabled(false);
+				makeDialog();
 			}
 		});
 		GridBagConstraints gbc_btnNewMessage = new GridBagConstraints();
@@ -206,14 +216,38 @@ public class MessageSenderWindow extends JFrame {
 			txtMessage.requestFocusInWindow();
 		}
 		else {
-			console(msg);
-			txtMessage.setText("");
-			txtMessage.requestFocusInWindow();
+			console(msg);//TODO edit this out maybe
+			manager.sendNewMessage(msg);
+		}
+		txtMessage.setText("");
+		txtMessage.requestFocusInWindow();
+	}
+
+	private void makeDialog(){
+		new UserLookupWindow(manager, this);
+	}
+
+	public void enableWindow(){
+		setEnabled(true);
+	}
+
+	public void selectUser(String name){ //TODO make this work
+		int index = -1;
+		for(int i = 0; i < listModel.size(); i++){
+			if(listModel.get(i).equals(name)){
+				index = i;
+
+				break;
+			}
+		}
+		System.out.println(index);
+		if(index != -1){
+			list.setSelectedIndex(index);
 		}
 	}
 
-	private void addElementToList(String name){
-
+	public void clearConsole(){
+		txtrHistory.setText(null);
 	}
 
 }

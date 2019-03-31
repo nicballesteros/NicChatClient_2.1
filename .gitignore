@@ -1,0 +1,10 @@
+.idea\misc.xml
+.idea\module.xml
+.idea\vcs.xml
+.idea\workspace.xml
+NicChatClientV2.iml
+out\
+out/production/NicChatClientV2/.idea/modules.xml
+com/nicballesteros/message/client/messagesender/MessageSenderWindow.java
+*.class
+*.xml
