@@ -39,7 +39,11 @@ public class MessageSenderManager {
     private List<String> acquaintacesName;
     private List<Integer> acquaintacesID;
 
-    public MessageSenderManager(int id, SecretKeySpec AESkey, InetAddress ipAddress, int port){
+    private String recipient;
+
+    private MessageSenderWindow window;
+
+    public MessageSenderManager(int id, SecretKeySpec AESkey, InetAddress ipAddress, int port, MessageSenderWindow window){
         this.id = id;
         this.AESkey = AESkey;
         this.ipAddress = ipAddress;
@@ -48,9 +52,11 @@ public class MessageSenderManager {
         idAsByte = ByteBuffer.allocate(4).putInt(id).array();
         this.acquaintacesID = new ArrayList<>();
         this.acquaintanceMap = new HashMap<>();
-
+        this.window = window;
         //Booleans
         running = true; //TODO disconnect and set this to false
+
+        recipient = "";
 
         try {
             this.socket = new DatagramSocket();
@@ -102,18 +108,15 @@ public class MessageSenderManager {
 
         if(encryption == (byte)101) { //AES encryption
             data = decryptByteAES(data);
-            byte[] id = null;
             byte[] extraData = null;
-            System.out.println(data.length);
-            if(data.length >= 8){
-                id = Arrays.copyOfRange(data, 4, 8);
-                extraData = Arrays.copyOfRange(data, 8, data.length);
+           // System.out.println(data.length);
+
+            if(data.length > 4){
+                extraData = Arrays.copyOfRange(data, 4, data.length);
                 data = Arrays.copyOfRange(data, 0, 4);
             }
-            else if(data.length > 4 && data.length < 8){
-                id = Arrays.copyOfRange(data, 4, 8);
-                data = Arrays.copyOfRange(data, 0, 4);
-            }
+
+
             ByteBuffer wrapped = ByteBuffer.wrap(data);
             int conf = wrapped.getInt();
 
@@ -125,15 +128,19 @@ public class MessageSenderManager {
                 socket.close();
             }
             else if(conf == 7777){ //receive id
+                byte[] id = Arrays.copyOfRange(extraData, 0, 4);
+                extraData = Arrays.copyOfRange(extraData, 4, extraData.length);
                 ByteBuffer bb = ByteBuffer.wrap(id);
                 int intID = bb.getInt();
                 String name = new String(extraData);
-                System.out.println(name);
+                //System.out.println(name);
                 acquaintacesName.add(name);
                 acquaintacesID.add(intID);
                 acquaintanceMap.put(name, intID);
             }
             else if(conf == 999){ //client exists
+                byte[] id = Arrays.copyOfRange(extraData, 0, 4);
+                extraData = Arrays.copyOfRange(extraData, 4, extraData.length);
                 clientExists = true;
                 ByteBuffer bb = ByteBuffer.wrap(id);
                 int intID = bb.getInt();
@@ -146,6 +153,50 @@ public class MessageSenderManager {
             else if(conf == 2565){
                 clientExists = false;
                 System.out.println("Client either already exists or doesn't exist");
+            }
+            else if(conf == 11111){
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                try{
+                    output.write(extraData);
+
+                    window.console(new String(output.toByteArray()));
+                    System.out.println(new String(output.toByteArray()));
+                }
+                catch(Exception e){
+                    e.printStackTrace();
+                }
+            }
+            else if(conf == 22222){ //name of recipient
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                try{
+                    output.write(extraData);
+
+
+                    String thisName = new String(output.toByteArray());
+                    System.out.println(thisName);
+                    if(!thisName.equals(recipient)){
+                        if(acquaintacesName.contains(thisName)){
+                            System.out.println("recipient: " + thisName);
+                            recipient = thisName;
+                            sendNewRecipient(acquaintanceMap.get(recipient));
+                            window.selectUser(thisName);
+                            window.clearConsole();
+                        }
+                        else{
+                            requestIfClientExists(thisName);
+                            if(doesClientExist()){
+                                System.out.println("hey");
+                            }
+                        }
+                    }
+                    else{
+                        //window.selectUser(recipient);
+                        //window.clearConsole();
+                    }
+                }
+                catch(Exception e){
+                    e.printStackTrace();
+                }
             }
             else {
                 System.out.println("Wasnt 12345");
@@ -244,6 +295,48 @@ public class MessageSenderManager {
         }
     }
 
+    private void sendNewRecipient(int nameID){
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream finalOut = new ByteArrayOutputStream();
+
+        byte[] nameIDasByte = ByteBuffer.allocate(4).putInt(nameID).array();
+        try{
+            finalOut.write(AESENCRYPTSIGNAL);
+            finalOut.write(idAsByte);
+
+            output.write(REGISTEREDSIGNAL);
+            output.write((byte)103);
+            output.write(nameIDasByte);
+            finalOut.write(encryptByteAES(output.toByteArray()));
+
+            send(finalOut.toByteArray());
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    public void sendNewMessage(String msg){
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream finalOut = new ByteArrayOutputStream();
+
+
+        try{
+            finalOut.write(AESENCRYPTSIGNAL);
+            finalOut.write(idAsByte);
+
+            output.write(REGISTEREDSIGNAL);
+            output.write((byte)104);
+            output.write(msg.getBytes());
+            finalOut.write(encryptByteAES(output.toByteArray()));
+
+            send(finalOut.toByteArray());
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
     private byte[] encryptByteAES(byte[] msg) {
         try {
             Cipher aescipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
@@ -290,9 +383,9 @@ public class MessageSenderManager {
     }
 
     public boolean doesAcquaintanceAlreadyExist(String name){
-        for(String Aname : acquaintacesName){
-            System.out.println(Aname);
-        }
+//        for(String Aname : acquaintacesName){
+//            System.out.println(Aname);
+//        }
 
         return acquaintacesName.contains(name);
     }
@@ -354,9 +447,26 @@ public class MessageSenderManager {
         return false;
     }
 
-    public void addAcquaintance(String name){
-        //get the id;
+    public void getID(int index){
+        Object obj = listModel.get(index);
+        String name = obj.toString();
+        //System.out.println(name);
 
+        int nameID = acquaintanceMap.get(name);
+        System.out.println(nameID);
+        if(nameID != -1 && !name.equals(recipient)){
+            recipient = name;
+            sendNewRecipient(nameID);
+            window.clearConsole();
+        }
+        else{
+            System.out.println("Error in getid");
+        }
+    }
+
+    public int getIndexOfListModel(String name){
+        Object n = name;
+        return listModel.indexOf(n);
     }
 
 }
