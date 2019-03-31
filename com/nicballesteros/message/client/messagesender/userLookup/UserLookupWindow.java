@@ -16,8 +16,9 @@ import java.awt.event.ActionListener;
 public class UserLookupWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
 	private JTextField txtSearch;
-
-	private JLabel lblErrorMsg;
+	
+	private JLabel lblErrorMsg1;
+	private JLabel lblErrorMsg2;
 	private JLabel lblEnterName;
 
 	/**
@@ -68,8 +69,11 @@ public class UserLookupWindow extends JFrame {
 		JButton btnSend = new JButton("Send");
 		btnSend.setBounds(101, 67, 56, 23);
 		getContentPane().add(btnSend);
+		
 		btnSend.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				lblErrorMsg1.setVisible(true);
+				lblErrorMsg2.setVisible(true);
 				System.out.println("send...");
 				String inputName = txtSearch.getText();
 				manager.requestIfClientExists(inputName);
@@ -79,35 +83,27 @@ public class UserLookupWindow extends JFrame {
 					dispose();
 				}
 				else{
-					errorMsg.setVisible(true);
+					lblErrorMsg1.setVisible(true);
+					lblErrorMsg2.setVisible(true);
 				}
 			}
 		});
-
-		lblErrorMsg = new JLabel("User does not exist or is already in your ");
-		lblEnterName.setBounds(99, 11, 61, 14);
-		getContentPane().add(lblEnterName);
-		lblErrorMsg.setVisible(false);
-
-		int code = 4;
-		String message = "";
-		Color color = Color.BLACK;
 		
-		if(code == 0) {
-			message = "User exists";
-			color = Color.GREEN;
-		}
-		else if (code == 1){
-			message = "User does not exist";
-			color = Color.RED;
-		}
+		lblErrorMsg1 = new JLabel("User either does not exist or ");
+		lblErrorMsg1.setForeground(Color.RED);
+		lblErrorMsg1.setBounds(59, 102, 141, 20);
+		getContentPane().add(lblErrorMsg1);
 		
-		JLabel lblMessage = new JLabel(message);
-		lblMessage.setForeground(color);
-		lblMessage.setFont(new Font("Tahoma", Font.PLAIN, 15));
-		lblMessage.setBounds(66, 101, 127, 33);
-		getContentPane().add(lblMessage);
+		lblErrorMsg2 = new JLabel("is already in your inbox");
+		lblErrorMsg2.setForeground(Color.RED);
+		lblErrorMsg2.setBounds(70, 123, 118, 14);
+		getContentPane().add(lblErrorMsg2);
+		lblErrorMsg1.setVisible(false);
+		lblErrorMsg2.setVisible(false);
+
 		
 		setVisible(true);
 	}
+
+	
 }
