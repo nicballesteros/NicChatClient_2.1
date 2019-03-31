@@ -1,46 +1,48 @@
 package com.nicballesteros.message.client.messagesender.userLookup;
 
-import java.awt.BorderLayout;
-import java.awt.EventQueue;
+import com.nicballesteros.message.client.messagesender.MessageSenderManager;
 
 import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.border.EmptyBorder;
-import java.awt.GridBagLayout;
 import javax.swing.JTextField;
 import javax.swing.UIManager;
 
-import java.awt.GridBagConstraints;
 import javax.swing.JLabel;
-import java.awt.Insets;
 import javax.swing.JButton;
 import java.awt.Font;
 import java.awt.Color;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 public class UserLookupWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
 	private JTextField txtSearch;
 
+	private JLabel lblErrorMsg;
+	private JLabel lblEnterName;
+
 	/**
 	 * Launch the application.
 	 */
-	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				try {
-					UserLookupWindow frame = new UserLookupWindow();
-					
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		});
-	}
+//	public static void main(String[] args) {
+//		EventQueue.invokeLater(new Runnable() {
+//			public void run() {
+//				try {
+//					UserLookupWindow frame = new UserLookupWindow();
+//
+//				} catch (Exception e) {
+//					e.printStackTrace();
+//				}
+//			}
+//		});
+//	}
+
+	private MessageSenderManager manager;
 
 	/**
 	 * Create the frame.
 	 */
-	public UserLookupWindow() {
+	public UserLookupWindow(MessageSenderManager manager) {
+		this.manager = manager;
 		
 		try {
 			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -49,12 +51,12 @@ public class UserLookupWindow extends JFrame {
 			e.printStackTrace();
 		}
 		setTitle("Start Conversation");
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		setBounds(100, 100, 275, 200);
 		//setSize(230, 200);
 		getContentPane().setLayout(null);
-		
-		JLabel lblEnterName = new JLabel("Enter Name:");
+
+		lblEnterName = new JLabel("Enter Name:");
 		lblEnterName.setBounds(99, 11, 61, 14);
 		getContentPane().add(lblEnterName);
 		
@@ -66,7 +68,27 @@ public class UserLookupWindow extends JFrame {
 		JButton btnSend = new JButton("Send");
 		btnSend.setBounds(101, 67, 56, 23);
 		getContentPane().add(btnSend);
-		
+		btnSend.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("send...");
+				String inputName = txtSearch.getText();
+				manager.requestIfClientExists(inputName);
+				if(manager.doesClientExist() && manager.doesAcquaintanceAlreadyExist(inputName)){
+					System.out.println("added");
+					manager.displayNewAcquaintance(inputName);
+					dispose();
+				}
+				else{
+					errorMsg.setVisible(true);
+				}
+			}
+		});
+
+		lblErrorMsg = new JLabel("User does not exist or is already in your ");
+		lblEnterName.setBounds(99, 11, 61, 14);
+		getContentPane().add(lblEnterName);
+		lblErrorMsg.setVisible(false);
+
 		int code = 4;
 		String message = "";
 		Color color = Color.BLACK;

@@ -43,7 +43,9 @@ public class NewUser {
 	private boolean publicKeyIsReceived;
 	private boolean running;
 	private boolean readyToSendCreds;
-	
+
+	//TODO if the user is made correctly, take the user pass ip and port and enter into the login window automagically
+
 	public NewUser(String username, String password, InetAddress address, int port) {
 		this.username = username;
 		this.password = password;

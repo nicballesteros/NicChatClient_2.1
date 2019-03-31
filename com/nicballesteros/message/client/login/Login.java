@@ -30,7 +30,14 @@ public class Login {
 	private Thread receive;
 	
 	private boolean connected;
-	
+	private boolean running = true;
+	private boolean continueToSender = false;
+	private boolean quit = false;
+	private boolean readyToSendCreds;
+	private boolean publicKeyIsReceived;
+	private boolean stopPepper = false;
+
+
 	private PublicKey serverPublicKey;
 	
 	private SecretKeySpec AESkey;
@@ -98,10 +105,31 @@ public class Login {
 		running = false;
 	}
 
-	private boolean quit = false;
 
 	public boolean failed(){
 		return quit;
+	}
+
+	public void receive() {
+		receive = new Thread("Receive") {
+			public void run() {
+				DatagramPacket packet;
+				while(running) {
+					byte[] data = new byte[1024];
+					packet = new DatagramPacket(data, data.length);
+
+					try {
+						socket.receive(packet);
+
+						whichFormOfEncryption(packet.getData());
+					}
+					catch(Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		};
+		receive.start();
 	}
 
 	private void whichFormOfEncryption(byte[] data) throws Exception {
@@ -135,6 +163,7 @@ public class Login {
 			data = decryptByteAES(data);
 			ByteBuffer wrapped = ByteBuffer.wrap(data);
 			int conf = wrapped.getInt();
+
 			if(conf == 24242) {
 				readyToSendCreds = true;
 			}
@@ -148,44 +177,25 @@ public class Login {
 				System.out.println("password accepted");
 			}
 			else if(conf == 55555){
+				continueToSender = true;
 				System.out.println("Client connected!!!");
+				Thread.sleep(1000); //for networking
+				closeSocket();
 			}
 			else {
 				System.out.println("Wasnt 12345");
 				quit = true;
+				running = false;
 			}
 		}
 		else if(encryption == (byte)25){
 			quit = true;
+			running = false;
 		}
 		else {
 			System.out.println("Woh woh woh error on which form");
 			quit = true;
 		}
-	}
-
-	private boolean running = true;
-
-	public void receive() {
-		receive = new Thread("Receive") {
-			public void run() {
-				DatagramPacket packet;
-				while(running) {
-					byte[] data = new byte[1024];
-					packet = new DatagramPacket(data, data.length);
-
-					try {
-						socket.receive(packet);
-
-						whichFormOfEncryption(packet.getData());
-					}
-					catch(Exception e) {
-						e.printStackTrace();
-					}
-				}
-			}
-		};
-		receive.start();
 	}
 
 	public void sendConnectionSignal() {
@@ -215,6 +225,22 @@ public class Login {
 		}
 
 		return null;
+	}
+
+	public int getID(){
+		return this.id;
+	}
+
+	public InetAddress getAddress(){
+		return address;
+	}
+
+	public int getPort(){
+		return port;
+	}
+
+	public SecretKeySpec getAESkey() {
+		return AESkey;
 	}
 
 	private byte[] hashPassword(int index) {
@@ -262,8 +288,7 @@ public class Login {
 		return false;
 	}
 
-	private boolean readyToSendCreds;
-	private boolean publicKeyIsReceived;
+
 
 	public boolean isServerReadyForCreds() {
 		return readyToSendCreds;
@@ -275,6 +300,10 @@ public class Login {
 
 	public boolean passAccepted(){
 		return stopPepper;
+	}
+
+	public boolean getContinueToSender(){
+		return this.continueToSender;
 	}
 
 	private byte[] encryptByteRSA(byte[] rsa) {
@@ -346,7 +375,6 @@ public class Login {
 		sendPacket(output.toByteArray());
 	}
 
-	private boolean stopPepper = false;
 
 	public void sendPassword() throws Exception{
 		byte encryptionIdentifier = (byte)102;
@@ -395,4 +423,14 @@ public class Login {
 		System.out.println("}");
 	}
 
+	public void closeSocket(){
+		running = false;
+		try {
+			Thread.sleep(2000);                //TODO fixthis
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		socket.close();
+	}
 }

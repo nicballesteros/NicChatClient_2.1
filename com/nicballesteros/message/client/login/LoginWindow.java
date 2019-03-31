@@ -1,5 +1,4 @@
 package com.nicballesteros.message.client.login;
-import java.awt.BorderLayout;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
@@ -21,7 +20,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.ActionEvent;
 
 public class LoginWindow extends JFrame {
-
+	//TODO include a hidden error message and show it when there is an error
 	/**
 	 * Everything for the login frame
 	 */
@@ -57,7 +56,7 @@ public class LoginWindow extends JFrame {
 		});
 	}	
 	
-	private boolean getInputs() {
+	private boolean sendDataToLogin() {
 		username = userField.getText();
 		password = new String(passwordField.getPassword());
 		ipAddress = ipField.getText();
@@ -108,7 +107,17 @@ public class LoginWindow extends JFrame {
 							e.printStackTrace();
 						}
 
-						if(login.passAccepted()){
+						time = 0;
+						while(!login.getContinueToSender() && time < 100){
+							try{
+								Thread.sleep(10);
+							}
+							catch (Exception e){
+								e.printStackTrace();
+							}
+						}
+
+						if(login.getContinueToSender()){
 							return true;
 						}
 					}
@@ -190,16 +199,17 @@ public class LoginWindow extends JFrame {
 		JButton btnLogin = new JButton("Login");
 		btnLogin.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				if(getInputs()) {
+				if(sendDataToLogin()) {
 					dispose();
-					new MessageSenderWindow();
+					new MessageSenderWindow(login.getID(), login.getAESkey(), login.getAddress(), login.getPort());
+					login.closeSocket();
 				}
 				else {
 					clearText();
 				}
 			}
 		});
-		btnLogin.setBounds(101, 277, 89, 23);
+		btnLogin.setBounds(97, 277, 89, 23);
 		contentPane.add(btnLogin);
 		
 		passwordField = new JPasswordField();
@@ -211,6 +221,8 @@ public class LoginWindow extends JFrame {
 		lblWelcome.setBounds(110, 11, 64, 20);
 		contentPane.add(lblWelcome);
 
+
+		//TODO fix this
 		userField.setText("test");
 		passwordField.setText("1234");
 		ipField.setText("192.168.2.89");
